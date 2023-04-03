@@ -16,7 +16,7 @@ def acceptconnection(sock):
 
 def respond_to_client(conn_socket, client_address):
     # while True:
-    conn_socket.send("shalachti milon ".encode())
+    conn_socket.send("shalachti milonn ".encode())
     print(serversdict)
 
 
