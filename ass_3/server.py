@@ -2,11 +2,18 @@ import socket
 import threading
 import pickle
 import json
+import time
+import struct
 
-
+#('192.168.241.1', 3000)
 serversdict=[]
 clientsdict={}
 
+def addservers(sock):
+    pass
+
+def createheader(t,st,l,sl):
+    return struct.pack('>bbhh',t,st,l,sl)
 
 def pingallusers():
     socket_objects = []
@@ -17,13 +24,18 @@ def pingallusers():
         sock.bind((my_ip, my_port))
         sock.connect(address)
         socket_objects.append(sock)
+        sock.close()
     # for sock in socket_objects:
     #     sock.send("conn try".encode())
-    for sock in socket_objects:
-        sock.close()
+    # for sock in socket_objects:
+    #     sock.close()
 
 def senddict(conn):
-    conn.sendall(pickle.dumps(serversdict))
+    global serversdict
+    picklearray = pickle.dumps(serversdict)
+    print(len(picklearray))
+    conn.send(createheader(1, 0, len(picklearray), 0))
+    conn.sendall(picklearray)
 
 def acceptconnection(sock):
     while True:
@@ -31,17 +43,29 @@ def acceptconnection(sock):
         print('new connection from', client_address)
         global serversdict
         if client_address not in serversdict:
-            senddict(conn)
             serversdict.append(client_address)
-        conn.close()
-        print("my list : " + str(serversdict))
+        # conn.close()
+        # print("my list : " + str(serversdict))
         #threading.Thread(target=respond_to_client, args=(conn, client_address)).start()
+        respond_to_client(conn, client_address)
 
 
 def respond_to_client(conn_socket, client_address):
     # while True:
-    conn_socket.send("shalachti milonn ".encode())
-    print(serversdict)
+    # 0-----1-----2----------4----------6
+    # |type | sub |    len   |   sub    |
+    # |     |type |          |   len    |
+    data = conn_socket.recv(6)
+    if len(data)==0:
+        conn_socket.close()
+        return
+    v1,v2,v3,v4 = struct.unpack('>bbhh',data)
+    if v1 == 0:
+        print("im sending dict")
+        senddict(conn_socket)
+    elif v1 == 1:
+        pass
+    conn_socket.close()
 
 
 my_ip = socket.gethostbyname(socket.gethostname())
@@ -64,13 +88,20 @@ for i in ports:
             #0-----1-----2----------4----------6
             #|type | sub |    len   |   sub    |
             #|     |type |          |   len    |
-            data = sock.recv(4096)
+            sock.send(createheader(0,0,0,0))
+            data = sock.recv(6)
+            v1,v2,v3,v4 = struct.unpack('>bbhh',data)
+            if v1 == 1:
+                data = sock.recv(v3)
             picklearray = pickle.loads(data)
+            print(picklearray)
             ###################################################
             #print('received from ', sock.getpeername(), sock.recv(1024).decode())
             serversdict.append(sock.getpeername())
+            aa = sock.getsockname()
+            if sock.getsockname() in picklearray :
+                picklearray.remove(sock.getsockname())
             serversdict.extend(picklearray)
-            print("origin : " +str(serversdict))
             sock.close()
             break
     except ConnectionRefusedError:
@@ -79,4 +110,7 @@ for i in ports:
         print(f"Error connecting to server on port {i}: {e}")
 print("End of searching")
 pingallusers()
+while True :
+    time.sleep(10)
+    print("my list : " + str(serversdict))
 
