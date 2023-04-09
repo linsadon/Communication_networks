@@ -7,64 +7,114 @@ import struct
 
 #('192.168.241.1', 3000)
 serversdict=[]
+#{'yuval':(socket of '192.168.241.1', 1234)}
 clientsdict={}
 
-def addservers(sock):
-    pass
+
+def heandlclient(sock,v1,v2,v3,v4):
+    while True:
+        if v1 == 2:
+            addclient(sock, v3)
+        elif v1 == 3:
+            forwardmsg(sock, v3, v4)
+        data = sock.recv(6)
+        if len(data) == 0:
+            sock.close()
+            return
+        v1, v2, v3, v4 = struct.unpack('>bbhh', data)
+
+
+
+def forwardmsg(sock,msgsize,subsize):
+    global clientsdict
+    data = sock.recv(msgsize).decode()
+    print(data)
+    sendername = [i for i in clientsdict if clientsdict[i]==sock]
+    recipient = data.split()[0]
+    if recipient in clientsdict:
+        clientsdict[recipient].send(('message from '+ str(sendername[0])+' : ' + data.split(' ', 1)[1]).encode())
+
+
+
+def addclient(sock,size):
+    global clientsdict
+    name = sock.recv(size).decode()
+    if name not in clientsdict:
+        clientsdict[name] = sock
+
+
+def addservers(sock,size):
+    global serversdict
+    data = sock.recv(size)
+    picklearray = pickle.loads(data)
+    if sock.getpeername() not in serversdict:
+        serversdict.append(sock.getpeername())
+    if sock.getsockname() in picklearray:
+        picklearray.remove(sock.getsockname())
+    serversdict.extend(picklearray)
+    sock.close()
+
 
 def createheader(t,st,l,sl):
     return struct.pack('>bbhh',t,st,l,sl)
 
+
 def pingallusers():
-    socket_objects = []
+    # socket_objects = []
     global serversdict
     for address in serversdict:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((my_ip, my_port))
         sock.connect(address)
-        socket_objects.append(sock)
+        # socket_objects.append(sock)
         sock.close()
     # for sock in socket_objects:
     #     sock.send("conn try".encode())
     # for sock in socket_objects:
     #     sock.close()
 
+
 def senddict(conn):
     global serversdict
     picklearray = pickle.dumps(serversdict)
-    print(len(picklearray))
     conn.send(createheader(1, 0, len(picklearray), 0))
     conn.sendall(picklearray)
+
 
 def acceptconnection(sock):
     while True:
         conn, client_address = sock.accept()
         print('new connection from', client_address)
-        global serversdict
-        if client_address not in serversdict:
-            serversdict.append(client_address)
         # conn.close()
         # print("my list : " + str(serversdict))
-        #threading.Thread(target=respond_to_client, args=(conn, client_address)).start()
-        respond_to_client(conn, client_address)
+        threading.Thread(target=respond_to_connect, args=(conn, client_address)).start()
+        #respond_to_connect(conn, client_address)
 
 
-def respond_to_client(conn_socket, client_address):
+def respond_to_connect(conn_socket, client_address):
     # while True:
     # 0-----1-----2----------4----------6
     # |type | sub |    len   |   sub    |
     # |     |type |          |   len    |
+    global serversdict
     data = conn_socket.recv(6)
     if len(data)==0:
         conn_socket.close()
         return
     v1,v2,v3,v4 = struct.unpack('>bbhh',data)
+    print("v1 : ",v1," v2 : ",v2," v3 : ",v3," v4 : ",v4)
     if v1 == 0:
-        print("im sending dict")
+        if client_address not in serversdict:
+            serversdict.append(client_address)
         senddict(conn_socket)
     elif v1 == 1:
-        pass
+        if client_address not in serversdict:
+            serversdict.append(client_address)
+        addservers(conn_socket, v3)
+    elif v1 == 2 or v1 == 3:
+        threading.Thread(target=heandlclient, args=(conn_socket,v1,v2,v3,v4)).start()
+        return
     conn_socket.close()
 
 
@@ -83,8 +133,6 @@ for i in ports:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind((my_ip, my_port))
             sock.connect((my_ip, i))
-            # sock.send(str(input("enter your name : ")).encode())
-            ###################################################
             #0-----1-----2----------4----------6
             #|type | sub |    len   |   sub    |
             #|     |type |          |   len    |
@@ -92,17 +140,9 @@ for i in ports:
             data = sock.recv(6)
             v1,v2,v3,v4 = struct.unpack('>bbhh',data)
             if v1 == 1:
-                data = sock.recv(v3)
-            picklearray = pickle.loads(data)
-            print(picklearray)
-            ###################################################
-            #print('received from ', sock.getpeername(), sock.recv(1024).decode())
-            serversdict.append(sock.getpeername())
-            aa = sock.getsockname()
-            if sock.getsockname() in picklearray :
-                picklearray.remove(sock.getsockname())
-            serversdict.extend(picklearray)
-            sock.close()
+                addservers(sock,v3)
+            elif v1 == 0:
+                senddict(sock)
             break
     except ConnectionRefusedError:
         print(f"The server is not active at port {i}")
@@ -110,7 +150,8 @@ for i in ports:
         print(f"Error connecting to server on port {i}: {e}")
 print("End of searching")
 pingallusers()
-while True :
+while True:
     time.sleep(10)
     print("my list : " + str(serversdict))
+    print("my client : " + str(clientsdict))
 
