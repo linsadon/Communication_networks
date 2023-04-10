@@ -5,7 +5,7 @@ import json
 import time
 import struct
 
-#('192.168.241.1', 3000)
+#(socket of '192.168.241.1', 3000)
 serversdict=[]
 #{'yuval':(socket of '192.168.241.1', 1234)}
 clientsdict={}
@@ -18,22 +18,36 @@ def heandlclient(sock,v1,v2,v3,v4):
         elif v1 == 3:
             forwardmsg(sock, v3, v4)
         data = sock.recv(6)
+        print("hendle : ",data)
         if len(data) == 0:
-            sock.close()
+            #sock.close()
             return
         v1, v2, v3, v4 = struct.unpack('>bbhh', data)
 
 
-
 def forwardmsg(sock,msgsize,subsize):
+    stopsearching = 0
     global clientsdict
+    global serversdict
     data = sock.recv(msgsize).decode()
-    print(data)
-    sendername = [i for i in clientsdict if clientsdict[i]==sock]
-    recipient = data.split()[0]
+    print("fwrd : ",data)
+    if '\0' in data[:subsize]:
+        split_users = data[:subsize].split('\0')
+        sendername = split_users[0]
+        recipient = split_users[1]
+        stopsearching = 1
+    else:
+        sendername = [i for i in clientsdict if clientsdict[i]==sock][0]
+        recipient = data[:subsize]
     if recipient in clientsdict:
-        clientsdict[recipient].send(('message from '+ str(sendername[0])+' : ' + data.split(' ', 1)[1]).encode())
-
+        clientsdict[recipient].send(('message from ' + str(sendername)+' : ' + data[subsize+1:]).encode())
+        return
+    if not stopsearching:
+        for i in serversdict:
+            participants = str(sendername) + '\0' + str(recipient)
+            print("parti : ",participants)
+            i.send(createheader(3,0,len(participants+" "+data[subsize+1:]),len(participants)))
+            i.send((participants+" "+data[subsize+1:]).encode())
 
 
 def addclient(sock,size):
@@ -47,37 +61,45 @@ def addservers(sock,size):
     global serversdict
     data = sock.recv(size)
     picklearray = pickle.loads(data)
-    if sock.getpeername() not in serversdict:
-        serversdict.append(sock.getpeername())
+    if sock not in serversdict:
+        serversdict.append(sock)
     if sock.getsockname() in picklearray:
         picklearray.remove(sock.getsockname())
-    serversdict.extend(picklearray)
-    sock.close()
+
+    templist= convert_addr_to_sock(picklearray)
+    serversdict.extend(templist)
+    #sock.close()
 
 
 def createheader(t,st,l,sl):
     return struct.pack('>bbhh',t,st,l,sl)
 
 
-def pingallusers():
-    # socket_objects = []
-    global serversdict
-    for address in serversdict:
+def convert_addr_to_sock(list):
+    socket_objects = []
+    for address in list:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((my_ip, my_port))
         sock.connect(address)
-        # socket_objects.append(sock)
-        sock.close()
+        socket_objects.append(sock)
+        #sock.close()
+    return socket_objects
     # for sock in socket_objects:
     #     sock.send("conn try".encode())
     # for sock in socket_objects:
     #     sock.close()
 
 
+def pingallusers(list):
+    for address in list:
+        address.send(createheader(4,0,0,0))
+
+
 def senddict(conn):
     global serversdict
-    picklearray = pickle.dumps(serversdict)
+    sending_server_list=[i.getpeername() for i in serversdict]
+    picklearray = pickle.dumps(sending_server_list)
     conn.send(createheader(1, 0, len(picklearray), 0))
     conn.sendall(picklearray)
 
@@ -98,24 +120,27 @@ def respond_to_connect(conn_socket, client_address):
     # |type | sub |    len   |   sub    |
     # |     |type |          |   len    |
     global serversdict
-    data = conn_socket.recv(6)
-    if len(data)==0:
-        conn_socket.close()
-        return
-    v1,v2,v3,v4 = struct.unpack('>bbhh',data)
-    print("v1 : ",v1," v2 : ",v2," v3 : ",v3," v4 : ",v4)
-    if v1 == 0:
-        if client_address not in serversdict:
-            serversdict.append(client_address)
-        senddict(conn_socket)
-    elif v1 == 1:
-        if client_address not in serversdict:
-            serversdict.append(client_address)
-        addservers(conn_socket, v3)
-    elif v1 == 2 or v1 == 3:
-        threading.Thread(target=heandlclient, args=(conn_socket,v1,v2,v3,v4)).start()
-        return
-    conn_socket.close()
+    while True :
+        data = conn_socket.recv(6)
+        if len(data)==0:
+            #conn_socket.close()
+            return
+        v1,v2,v3,v4 = struct.unpack('>bbhh',data)
+        if v1 == 0:
+            if conn_socket not in serversdict:
+                serversdict.append(conn_socket)
+            senddict(conn_socket)
+        elif v1 == 1:
+            if conn_socket not in serversdict:
+                serversdict.append(conn_socket)
+            addservers(conn_socket, v3)
+        elif v1 == 2 or v1 == 3:
+            threading.Thread(target=heandlclient, args=(conn_socket,v1,v2,v3,v4)).start()
+            return
+        elif v1 == 4:
+            if conn_socket.getpeername() not in [i.getpeername() for i in serversdict]:
+                serversdict.append(conn_socket)
+    #conn_socket.close()
 
 
 my_ip = socket.gethostbyname(socket.gethostname())
@@ -149,9 +174,10 @@ for i in ports:
     except socket.error as e:
         print(f"Error connecting to server on port {i}: {e}")
 print("End of searching")
-pingallusers()
+pingallusers(serversdict)
 while True:
     time.sleep(10)
-    print("my list : " + str(serversdict))
+    #print("my servers : " + str(serversdict))
+    print("my addr : " , [i.getpeername() for i in serversdict ])
     print("my client : " + str(clientsdict))
 
