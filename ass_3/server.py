@@ -18,10 +18,9 @@ def heandlclient(sock,v1,v2,v3,v4):
         elif v1 == 3:
             forwardmsg(sock, v3, v4)
         data = sock.recv(6)
-        print("hendle : ",data)
-        if len(data) == 0:
-            #sock.close()
-            return
+        # if len(data) == 0:
+        #     #sock.close()
+        #     return
         v1, v2, v3, v4 = struct.unpack('>bbhh', data)
 
 
@@ -30,7 +29,6 @@ def forwardmsg(sock,msgsize,subsize):
     global clientsdict
     global serversdict
     data = sock.recv(msgsize).decode()
-    print("fwrd : ",data)
     if '\0' in data[:subsize]:
         split_users = data[:subsize].split('\0')
         sendername = split_users[0]
@@ -45,7 +43,6 @@ def forwardmsg(sock,msgsize,subsize):
     if not stopsearching:
         for i in serversdict:
             participants = str(sendername) + '\0' + str(recipient)
-            print("parti : ",participants)
             i.send(createheader(3,0,len(participants+" "+data[subsize+1:]),len(participants)))
             i.send((participants+" "+data[subsize+1:]).encode())
 
@@ -122,9 +119,10 @@ def respond_to_connect(conn_socket, client_address):
     global serversdict
     while True :
         data = conn_socket.recv(6)
-        if len(data)==0:
-            #conn_socket.close()
-            return
+        print("kibalti mashu : ",struct.unpack('>bbhh',data))
+        # if len(data)==0:
+        #     #conn_socket.close()
+        #     return
         v1,v2,v3,v4 = struct.unpack('>bbhh',data)
         if v1 == 0:
             if conn_socket not in serversdict:
@@ -136,7 +134,7 @@ def respond_to_connect(conn_socket, client_address):
             addservers(conn_socket, v3)
         elif v1 == 2 or v1 == 3:
             threading.Thread(target=heandlclient, args=(conn_socket,v1,v2,v3,v4)).start()
-            return
+            break
         elif v1 == 4:
             if conn_socket.getpeername() not in [i.getpeername() for i in serversdict]:
                 serversdict.append(conn_socket)
@@ -175,9 +173,9 @@ for i in ports:
         print(f"Error connecting to server on port {i}: {e}")
 print("End of searching")
 pingallusers(serversdict)
-while True:
-    time.sleep(10)
-    #print("my servers : " + str(serversdict))
-    print("my addr : " , [i.getpeername() for i in serversdict ])
-    print("my client : " + str(clientsdict))
+# while True:
+#     time.sleep(10)
+#     #print("my servers : " + str(serversdict))
+#     print("my addr : " , [i.getpeername() for i in serversdict ])
+#     print("my client : " + str(clientsdict))
 
