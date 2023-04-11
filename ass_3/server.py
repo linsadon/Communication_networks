@@ -117,7 +117,8 @@ def respond_to_connect(conn_socket, client_address):
     # |type | sub |    len   |   sub    |
     # |     |type |          |   len    |
     global serversdict
-    while True :
+    global endsending
+    while True:
         data = conn_socket.recv(6)
         print("kibalti mashu : ",struct.unpack('>bbhh',data))
         # if len(data)==0:
@@ -132,6 +133,7 @@ def respond_to_connect(conn_socket, client_address):
             if conn_socket not in serversdict:
                 serversdict.append(conn_socket)
             addservers(conn_socket, v3)
+            pingallusers(serversdict)
         elif v1 == 2 or v1 == 3:
             threading.Thread(target=heandlclient, args=(conn_socket,v1,v2,v3,v4)).start()
             break
@@ -160,22 +162,23 @@ for i in ports:
             #|type | sub |    len   |   sub    |
             #|     |type |          |   len    |
             sock.send(createheader(0,0,0,0))
-            data = sock.recv(6)
-            v1,v2,v3,v4 = struct.unpack('>bbhh',data)
-            if v1 == 1:
-                addservers(sock,v3)
-            elif v1 == 0:
-                senddict(sock)
+            threading.Thread(target=respond_to_connect, args=(sock, '0.0.0.0')).start()
+            # data = sock.recv(6)
+            # v1,v2,v3,v4 = struct.unpack('>bbhh',data)
+            # if v1 == 1:
+            #     addservers(sock,v3)
+            # elif v1 == 0:
+            #     senddict(sock)
             break
     except ConnectionRefusedError:
         print(f"The server is not active at port {i}")
     except socket.error as e:
         print(f"Error connecting to server on port {i}: {e}")
 print("End of searching")
-pingallusers(serversdict)
-# while True:
-#     time.sleep(10)
-#     #print("my servers : " + str(serversdict))
-#     print("my addr : " , [i.getpeername() for i in serversdict ])
-#     print("my client : " + str(clientsdict))
+#pingallusers(serversdict)
+while True:
+    time.sleep(10)
+    #print("my servers : " + str(serversdict))
+    print("my addr : " , [i.getpeername() for i in serversdict ])
+    print("my client : " + str(clientsdict))
 
