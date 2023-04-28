@@ -18,9 +18,6 @@ def heandlclient(sock,v1,v2,v3,v4):
         elif v1 == 3:
             forwardmsg(sock, v3, v4)
         data = sock.recv(6)
-        # if len(data) == 0:
-        #     #sock.close()
-        #     return
         v1, v2, v3, v4 = struct.unpack('>bbhh', data)
 
 
@@ -82,10 +79,6 @@ def convert_addr_to_sock(list):
         socket_objects.append(sock)
         #sock.close()
     return socket_objects
-    # for sock in socket_objects:
-    #     sock.send("conn try".encode())
-    # for sock in socket_objects:
-    #     sock.close()
 
 
 def pingallusers(list):
@@ -105,14 +98,10 @@ def acceptconnection(sock):
     while True:
         conn, client_address = sock.accept()
         print('new connection from', client_address)
-        # conn.close()
-        # print("my list : " + str(serversdict))
         threading.Thread(target=respond_to_connect, args=(conn, client_address)).start()
-        #respond_to_connect(conn, client_address)
 
 
 def respond_to_connect(conn_socket, client_address):
-    # while True:
     # 0-----1-----2----------4----------6
     # |type | sub |    len   |   sub    |
     # |     |type |          |   len    |
@@ -120,10 +109,6 @@ def respond_to_connect(conn_socket, client_address):
     global endsending
     while True:
         data = conn_socket.recv(6)
-        print("kibalti mashu : ",struct.unpack('>bbhh',data))
-        # if len(data)==0:
-        #     #conn_socket.close()
-        #     return
         v1,v2,v3,v4 = struct.unpack('>bbhh',data)
         if v1 == 0:
             if conn_socket not in serversdict:
@@ -163,22 +148,14 @@ for i in ports:
             #|     |type |          |   len    |
             sock.send(createheader(0,0,0,0))
             threading.Thread(target=respond_to_connect, args=(sock, '0.0.0.0')).start()
-            # data = sock.recv(6)
-            # v1,v2,v3,v4 = struct.unpack('>bbhh',data)
-            # if v1 == 1:
-            #     addservers(sock,v3)
-            # elif v1 == 0:
-            #     senddict(sock)
             break
     except ConnectionRefusedError:
         print(f"The server is not active at port {i}")
     except socket.error as e:
         print(f"Error connecting to server on port {i}: {e}")
 print("End of searching")
-#pingallusers(serversdict)
 while True:
     time.sleep(10)
-    #print("my servers : " + str(serversdict))
     print("my addr : " , [i.getpeername() for i in serversdict ])
     print("my client : " + str(clientsdict))
 
