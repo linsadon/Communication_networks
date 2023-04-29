@@ -8,6 +8,14 @@ from socket import error as er
 import errno
 
 
+def createsock(addr):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(my_addr)
+    sock.connect(addr)
+    return sock
+
+
 def output_recvfrom(sock,my_name):
     global servers
     while True:
@@ -17,14 +25,13 @@ def output_recvfrom(sock,my_name):
             print(data.decode())
         except ConnectionResetError:
             servers.remove(sock.getpeername())
-            server_addr = addservers(sock,0,1000,1)
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-            sock.connect(server_addr)
+            server_addr = echomsg(sock,0,1000,1)
+            sock = createsock(server_addr)
             sock.send(struct.pack('>bbhh', 2, 1, len(my_name), 0))
             sock.send(my_name.encode())
 
 
-def addservers(sock,size,elapsed,type):
+def echomsg(sock,size,elapsed,type):
     global servers
     min_rtt = elapsed
     min_addr = None
@@ -36,9 +43,7 @@ def addservers(sock,size,elapsed,type):
     else:
         picklearray = servers
     for address in picklearray:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.connect(address)
+        sock = createsock(address)
         start = time.time()
         sock.send(struct.pack('>bbhh', 5, 0, 0, 0))
         sock.recv(6)
@@ -57,8 +62,10 @@ servers = []
 selected_port = ports[int(input("select port you want to connect from 0-4: "))]
 server_addr = (my_ip, selected_port)
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 my_name = input('Enter your name: ')
 sock.connect(server_addr)
+my_addr = sock.getsockname()
 servers.append(server_addr)
 # sock.send(struct.pack('>bbhh',2,1,len(my_name),0))
 # sock.send(my_name.encode())
@@ -72,13 +79,12 @@ print("RTT for server ", str(sock.getpeername()), ' : ', str(elapsed))
 data = sock.recv(6)
 v1, v2, v3, v4 = struct.unpack('>bbhh', data)
 if v1 == 1:
-    min_addr = addservers(sock, v3, elapsed,0)
+    min_addr = echomsg(sock, v3, elapsed,0)
 sock.close()
 if min_addr:
     server_addr = min_addr
 print("connect to server: ", str(server_addr))
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-sock.connect(server_addr)
+sock = createsock(server_addr)
 sock.send(struct.pack('>bbhh',2,1,len(my_name),0))
 sock.send(my_name.encode())
 
